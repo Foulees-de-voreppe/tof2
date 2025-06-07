@@ -16,43 +16,107 @@ document.addEventListener('DOMContentLoaded', () => {
       
       async function startCamera() {
         try {
-          if (!resultDiv) return;
-          
-          const permissions = await navigator.permissions.query({ name: 'camera' });
-          
-          if (permissions.state === 'denied') {
-            resultDiv.textContent = 'Permission refusée. Veuillez autoriser la caméra.';
-            resultDiv.style.color = 'red';
-            return;
-          }
+          // Détection mobile
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
           
           stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
               facingMode: 'environment',
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
+              width: { ideal: isMobile ? 1280 : 1920 },
+              height: { ideal: isMobile ? 720 : 1080 }
             },
             audio: false 
           });
           
           video.srcObject = stream;
+          video.play();
           
         } catch (err) {
           if (resultDiv) {
-            if (err.name === 'NotAllowedError') {
-              resultDiv.textContent = 'Permission refusée. Veuillez autoriser l\'accès à la caméra.';
-            } else if (err.name === 'NotFoundError') {
-              resultDiv.textContent = 'Aucun périphérique de capture trouvé.';
-            } else {
-              resultDiv.textContent = `Erreur: ${err.message}`;
-            }
+            resultDiv.textContent = `Erreur: ${err.message}`;
             resultDiv.style.color = 'red';
           }
           console.error('Erreur caméra:', err);
         }
       }
       
-      // ... (le reste du code reste inchangé) ...
+      function capturePhoto() {
+        try {
+          // Ajuster la taille du canvas à la vidéo
+          const videoWidth = video.videoWidth;
+          const videoHeight = video.videoHeight;
+          
+          canvas.width = videoWidth;
+          canvas.height = videoHeight;
+          
+          // Dessiner l'image sur le canvas
+          const context = canvas.getContext('2d');
+          context.drawImage(video, 0, 0, videoWidth, videoHeight);
+          
+          // Obtenir la photo en base64
+          photoData = canvas.toDataURL('image/jpeg', 0.8);
+          
+          // Basculer l'affichage
+          video.style.display = 'none';
+          canvas.style.display = 'block';
+          
+          // Mettre à jour les boutons
+          captureBtn.disabled = true;
+          retakeBtn.disabled = false;
+          uploadBtn.disabled = false;
+          
+        } catch (err) {
+          if (resultDiv) {
+            resultDiv.textContent = 'Erreur lors de la capture';
+            resultDiv.style.color = 'red';
+          }
+          console.error('Erreur capture:', err);
+        }
+      }
       
+      // Gestion des événements pour mobile et desktop
+      captureBtn.addEventListener('click', capturePhoto);
+      captureBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        capturePhoto();
+      });
+      
+      retakeBtn.addEventListener('click', () => {
+        video.style.display = 'block';
+        canvas.style.display = 'none';
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        uploadBtn.disabled = true;
+      });
+      
+      uploadBtn.addEventListener('click', async () => {
+        if (!photoData) return;
+        
+        try {
+          resultDiv.textContent = 'Envoi en cours...';
+          resultDiv.style.color = 'black';
+          
+          const blob = await fetch(photoData).then(res => res.blob());
+          const formData = new FormData();
+          formData.append('file', blob, 'photo.jpg');
+          
+          const response = await fetch('https://script.google.com/macros/s/AKfycbzbdC-60zvJpOXhWBIgV3kdkIjI1u5M0m-5tajQrpWbrMOHfeNYWuBcflraX_5T4rr4/exec', {
+            method: 'POST',
+            body: formData
+          });
+          
+          const result = await response.text();
+          resultDiv.textContent = 'Photo envoyée avec succès!';
+          resultDiv.style.color = 'green';
+          
+        } catch (err) {
+          if (resultDiv) {
+            resultDiv.textContent = `Erreur lors de l'envoi: ${err.message}`;
+            resultDiv.style.color = 'red';
+          }
+        }
+      });
+      
+      // Démarrer la caméra
       startCamera();
     });
